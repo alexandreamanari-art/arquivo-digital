@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>ARQUIVO DIGITAL - CEDAT</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#003366">
+
+  <!-- Bibliotecas para exportar PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f4f4f4; }
+    h1 { background: #003366; color: #fff; padding: 15px; margin: 0; }
+    .formulario { 
+      background: #cce0ff; 
+      padding: 20px; 
+      display: flex; 
+      flex-wrap: wrap; 
+      gap: 15px; 
+      align-items: flex-end;
+    }
+    .formulario label { display: block; font-weight: bold; margin-bottom: 5px; }
+    .formulario input, .formulario textarea { padding: 8px; width: 250px; border: 1px solid #999; border-radius: 5px; }
+    textarea { width: 520px; height: 60px; }
+    button { padding: 8px 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; display:flex; align-items:center; gap:6px; }
+    .btn-salvar { background: #28a745; color: white; }
+    .btn-exportar { background: #ffc107; color: black; }
+    .btn-importar { background: #6f42c1; color: white; }
+    .btn-limpar { background: #dc3545; color: white; }
+    .busca { margin: 15px; }
+    .busca input { padding: 8px; width: 300px; border: 1px solid #999; border-radius: 5px; }
+    .resultados-bar { 
+      display: none; 
+      background: #d4edda; 
+      color: #155724; 
+      padding: 10px; 
+      margin: 0 15px 15px 15px; 
+      border-radius: 5px; 
+      border: 1px solid #c3e6cb;
+      font-weight: bold;
+    }
+    .resultados-bar button { 
+      margin-left: 15px; 
+      background: #ffc107; 
+      color: black; 
+      border: none; 
+      padding: 5px 10px; 
+      border-radius: 5px; 
+      cursor: pointer; 
+      font-weight: bold;
+    }
+    .tabela-container { display: none; margin: 15px; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #003366; color: white; }
+    tr:nth-child(even) { background: #f2f2f2; }
+
+    /* Dropdown custom */
+    .dropdown { position: relative; display: inline-block; }
+    .dropbtn { background: #007bff; color: white; padding: 6px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      background-color: white;
+      min-width: 140px;
+      box-shadow: 0px 4px 8px rgba(0,0,0,0.2);
+      z-index: 1;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .dropdown-content button {
+      background: white;
+      border: none;
+      text-align: left;
+      padding: 10px;
+      width: 100%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dropdown-content button:hover { background: #f2f2f2; }
+    .dropdown:hover .dropdown-content { display: block; }
+  </style>
+</head>
+<body>
+  <h1>Arquivo Digital - Célula da Dívida Ativa</h1>
+
+  <div class="formulario">
+    <div>
+      <label>Nome Documento</label>
+      <input type="text" id="nome">
+    </div>
+    <div>
+      <label>Nº Documento</label>
+      <input type="text" id="numero">
+    </div>
+    <div>
+      <label>Localizar Arquivo</label>
+      <input type="text" id="local">
+    </div>
+    <div>
+      <label>Descrição</label>
+      <textarea id="descricao"></textarea>
+    </div>
+    <div>
+      <label>Anexar Arquivo</label>
+      <input type="file" id="anexo">
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <button class="btn-salvar" onclick="salvarRegistro()">✅ Cadastrar</button>
+      <button class="btn-limpar" onclick="limparFormulario()">🧹 Limpar Formulário</button>
+      <button class="btn-exportar" onclick="exportarTXT()">📄 Exportar TXT</button>
+      <button class="btn-exportar" onclick="exportarPDF()">📄 Exportar PDF</button>
+      <button class="btn-importar" onclick="document.getElementById('inputImportar').click()">📥 Importar</button>
+      <input type="file" id="inputImportar" style="display:none" accept=".txt,.json" onchange="importarArquivo(event)">
+    </div>
+  </div>
+
+  <div class="busca">
+    <input type="text" id="campoBusca" placeholder="Pesquisar..." onkeyup="buscar()">
+  </div>
+  <div class="resultados-bar" id="barraResultados">
+    <span id="textoResultados"></span>
+    <button onclick="limparBusca()">Limpar Pesquisa</button>
+  </div>
+
+  <div class="tabela-container" id="containerTabela">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Data Cadastro</th>
+          <th>Nome Documento</th>
+          <th>Nº Documento</th>
+          <th>Local Arquivo</th>
+          <th>Descrição</th>
+          <th>Anexo</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tabelaRegistros"></tbody>
+    </table>
+  </div>
+
+  <script>
+    let registros = JSON.parse(localStorage.getItem("meuCadastro") || "[]");
+    let editando = null;
+
+    function gerarID() {
+      return registros.length ? Math.max(...registros.map(r => r.id)) + 1 : 1;
+    }
+
+    function salvarRegistro() {
+      const nome = document.getElementById("nome").value;
+      const numero = document.getElementById("numero").value;
+      const local = document.getElementById("local").value;
+      const descricao = document.getElementById("descricao").value;
+      const anexoInput = document.getElementById("anexo");
+
+      let anexo = "";
+      let anexoData = "";
+      if (anexoInput.files.length > 0) {
+        const file = anexoInput.files[0];
+        anexo = file.name;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          anexoData = e.target.result;
+          salvarRegistroFinal(nome, numero, local, descricao, anexo, anexoData);
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+      salvarRegistroFinal(nome, numero, local, descricao, anexo, anexoData);
+    }
+
+    function salvarRegistroFinal(nome, numero, local, descricao, anexo, anexoData) {
+      if (editando !== null) {
+        registros[editando] = { ...registros[editando], nome, numero, local, descricao, anexo, anexoData };
+        editando = null;
+      } else {
+        const id = gerarID();
+        const dataCadastro = new Date().toLocaleDateString();
+        registros.push({ id, dataCadastro, nome, numero, local, descricao, anexo, anexoData });
+      }
+      localStorage.setItem("meuCadastro", JSON.stringify(registros));
+      limparFormulario();
+      exibirRegistros(registros);
+    }
+
+    // ✅ Corrigido: agora limpa inclusive o anexo
+    function limparFormulario() {
+      document.getElementById("nome").value = "";
+      document.getElementById("numero").value = "";
+      document.getElementById("local").value = "";
+      document.getElementById("descricao").value = "";
+
+      const anexoEl = document.getElementById("anexo");
+      if (anexoEl) {
+        anexoEl.value = ""; 
+        if (anexoEl.value) { 
+          const novo = anexoEl.cloneNode(true);
+          novo.id = "anexo";
+          anexoEl.parentNode.replaceChild(novo, anexoEl);
+        }
+      }
+
+      editando = null;
+    }
+
+    function exibirRegistros(lista) {
+      const tabela = document.getElementById("tabelaRegistros");
+      tabela.innerHTML = "";
+      lista.forEach((r, i) => {
+        tabela.innerHTML += `
+          <tr>
+            <td>${r.id}</td>
+            <td>${r.dataCadastro || ""}</td>
+            <td>${r.nome}</td>
+            <td>${r.numero}</td>
+            <td>${r.local}</td>
+            <td>${r.descricao}</td>
+            <td>${r.anexo || "(sem anexo)"}</td>
+            <td>
+              <div class="dropdown">
+                <button class="dropbtn">⚙️ Opções</button>
+                <div class="dropdown-content">
+                  <button onclick="editar(${i})">✏️ Editar</button>
+                  <button onclick="excluir(${i})">🗑️ Excluir</button>
+                  <button onclick="visualizar(${i})">👁️ Visualizar</button>
+                  <button onclick="baixar(${i})">⬇️ Baixar</button>
+                </div>
+              </div>
+            </td>
+          </tr>`;
+      });
+      document.getElementById("containerTabela").style.display = lista.length ? "block" : "none";
+    }
+
+    function editar(i) {
+      const r = registros[i];
+      document.getElementById("nome").value = r.nome;
+      document.getElementById("numero").value = r.numero;
+      document.getElementById("local").value = r.local;
+      document.getElementById("descricao").value = r.descricao;
+      editando = i;
+    }
+
+    function excluir(i) {
+      if (confirm("Tem certeza que deseja excluir?")) {
+        registros.splice(i, 1);
+        localStorage.setItem("meuCadastro", JSON.stringify(registros));
+        exibirRegistros(registros);
+      }
+    }
+
+    function visualizar(i) {
+      const r = registros[i];
+      if (r.anexoData) {
+        window.open(r.anexoData, "_blank");
+      } else {
+        alert("Nenhum anexo disponível!");
+      }
+    }
+
+    function baixar(i) {
+      const r = registros[i];
+      if (r.anexoData) {
+        const link = document.createElement("a");
+        link.href = r.anexoData;
+        link.download = r.anexo || "anexo";
+        link.click();
+      } else {
+        alert("Nenhum anexo disponível para este registro!");
+      }
+    }
+
+    function buscar() {
+      const termo = document.getElementById("campoBusca").value.toLowerCase();
+      if (termo === "") {
+        document.getElementById("barraResultados").style.display = "none";
+        document.getElementById("containerTabela").style.display = "none";
+        return;
+      }
+      const filtrados = registros.filter(r =>
+        r.nome.toLowerCase().includes(termo) ||
+        r.numero.toLowerCase().includes(termo) ||
+        r.local.toLowerCase().includes(termo) ||
+        r.descricao.toLowerCase().includes(termo)
+      );
+      document.getElementById("textoResultados").innerText =
+        `Foram encontrados ${filtrados.length} resultados para "${termo}"`;
+      document.getElementById("barraResultados").style.display = "block";
+      exibirRegistros(filtrados);
+    }
+
+    function limparBusca() {
+      document.getElementById("campoBusca").value = "";
+      document.getElementById("barraResultados").style.display = "none";
+      document.getElementById("containerTabela").style.display = "none";
+    }
+
+    function exportarTXT() {
+      let conteudo = "ID\tData Cadastro\tNome Documento\tNº Documento\tLocal Arquivo\tDescrição\tAnexo\n";
+      registros.forEach(r => {
+        conteudo += `${r.id}\t${r.dataCadastro}\t${r.nome}\t${r.numero}\t${r.local}\t${r.descricao}\t${r.anexo || ""}\n`;
+      });
+      const blob = new Blob([conteudo], { type: "text/plain;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "relatorio.txt";
+      link.click();
+    }
+
+    function exportarPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.text("Relatório de Documentos", 14, 15);
+      doc.autoTable({
+        head: [["ID", "Data Cadastro", "Nome Documento", "Nº Documento", "Local Arquivo", "Descrição", "Anexo"]],
+        body: registros.map(r => [r.id, r.dataCadastro, r.nome, r.numero, r.local, r.descricao, r.anexo || ""]),
+        startY: 20,
+        styles: { fontSize: 8 }
+      });
+      doc.save("relatorio.pdf");
+    }
+
+    function importarArquivo(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          let conteudo = e.target.result;
+          if (file.name.endsWith(".json")) {
+            registros = JSON.parse(conteudo);
+          } else {
+            const linhas = conteudo.split("\n").slice(1);
+            registros = linhas.filter(l => l.trim() !== "").map(l => {
+              const [id, dataCadastro, nome, numero, local, descricao, anexo] = l.split("\t");
+              return { id: parseInt(id), dataCadastro, nome, numero, local, descricao, anexo, anexoData: "" };
+            });
+          }
+          localStorage.setItem("meuCadastro", JSON.stringify(registros));
+          alert("Importação concluída!");
+          exibirRegistros(registros);
+        } catch (err) {
+          alert("Erro ao importar arquivo!");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // Registrar service worker para PWA
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("service-worker.js")
+          .then(() => console.log("Service Worker registrado!"))
+          .catch(err => console.log("Erro ao registrar SW:", err));
+      });
+    }
+
+    // Exibir registros ao carregar
+    exibirRegistros(registros);
+  </script>
+</body>
+</html>
+
